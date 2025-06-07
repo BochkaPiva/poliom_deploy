@@ -1,0 +1,199 @@
+version: '3.8'
+
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: rag_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis для кэширования и очередей
+  redis:
+    image: redis:7-alpine
+    container_name: rag_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Админ-панель с интегрированной обработкой документов
+  admin-panel:
+    build:
+      context: .
+      dockerfile: services/admin-panel/Dockerfile
+    container_name: rag_admin_panel
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONPATH=/app
+      # Настройки RAG системы
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.3}
+      - SEARCH_LIMIT=${SEARCH_LIMIT:-15}
+      - MIN_SIMILARITY_THRESHOLD=${MIN_SIMILARITY_THRESHOLD:-0.25}
+      # Кэширование моделей
+      - TRANSFORMERS_CACHE=/app/models_cache
+      - HF_HOME=/app/models_cache
+    volumes:
+      - document_uploads:/app/uploads
+      - ml_models_cache:/app/models_cache  # Кэш для ML моделей
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # Увеличено для ML
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Celery worker для обработки документов
+  celery-worker:
+    build:
+      context: .
+      dockerfile: services/admin-panel/Dockerfile
+    container_name: rag_celery_worker
+    command: sh -c "cd /app && celery -A celery_app worker --loglevel=info --concurrency=1"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONPATH=/app
+      # Настройки RAG системы
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.3}
+      - SEARCH_LIMIT=${SEARCH_LIMIT:-15}
+      - MIN_SIMILARITY_THRESHOLD=${MIN_SIMILARITY_THRESHOLD:-0.25}
+      # Кэширование моделей
+      - TRANSFORMERS_CACHE=/app/models_cache
+      - HF_HOME=/app/models_cache
+    volumes:
+      - document_uploads:/app/uploads
+      - ml_models_cache:/app/models_cache  # Общий кэш моделей
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rag_network
+    deploy:
+      resources:
+        limits:
+          memory: 3G  # Больше памяти для обработки
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "sh", "-c", "cd /app && celery -A celery_app inspect ping"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  # Telegram бот
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: services/telegram-bot/Dockerfile
+    container_name: rag_telegram_bot
+    restart: unless-stopped  # Автоматический перезапуск
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_URL=redis://redis:6379/0
+      - GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - PYTHONPATH=/app:/app/shared
+      # Настройки RAG системы
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.3}
+      - SEARCH_LIMIT=${SEARCH_LIMIT:-15}
+      - MIN_SIMILARITY_THRESHOLD=${MIN_SIMILARITY_THRESHOLD:-0.25}
+    volumes:
+      - ./services/shared:/app/shared:ro
+      - document_uploads:/app/uploads
+    ports:
+      - "8080"
+    networks:
+      - rag_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # pgAdmin веб-интерфейс
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: rag_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8082:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag_network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+  document_uploads:
+  ml_models_cache:  # Новый volume для кэширования ML моделей
+  pgadmin_data:  # Volume для pgAdmin
+
+networks:
+  rag_network:
+    driver: bridge 

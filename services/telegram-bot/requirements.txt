@@ -1,0 +1,44 @@
+# Telegram Bot Dependencies
+aiogram==3.3.0
+python-dotenv==1.0.0
+
+# HTTP and API clients
+httpx==0.25.2
+aiohttp==3.9.1
+requests==2.31.0
+
+# Database
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+alembic==1.13.1
+pgvector==0.2.4
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Document processing
+python-docx==0.8.11
+PyPDF2==3.0.1
+python-magic==0.4.27
+
+# Search and embeddings
+sentence-transformers==4.1.0
+transformers>=4.41.0
+huggingface_hub>=0.19.4
+faiss-cpu==1.7.4
+numpy>=1.24.3
+
+# Text processing
+nltk==3.8.1
+pymorphy2==0.9.1
+
+# Utilities
+pydantic==2.5.0
+pydantic-settings==2.1.0
+loguru==0.7.2
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1 

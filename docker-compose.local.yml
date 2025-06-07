@@ -1,0 +1,200 @@
+version: '3.8'
+
+services:
+  # База данных PostgreSQL
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: poliom_postgres_local
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-poliom_local}
+      - POSTGRES_USER=${POSTGRES_USER:-poliom_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-poliom_password_123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - poliom_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poliom_user}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis для кэширования
+  redis:
+    image: redis:7-alpine
+    container_name: poliom_redis_local
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - poliom_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Telegram бот POLIOM
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: services/telegram-bot/Dockerfile
+    container_name: poliom_telegram_bot_local
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-poliom_user}:${POSTGRES_PASSWORD:-poliom_password_123}@postgres:5432/${POSTGRES_DB:-poliom_local}
+      - REDIS_URL=redis://redis:6379/0
+      - GIGACHAT_API_KEY=${GIGACHAT_API_KEY:-}
+      - GIGACHAT_SCOPE=${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONPATH=/app
+      - ENVIRONMENT=local
+      - BOT_TIMEOUT=${BOT_TIMEOUT:-30}
+      - MAX_MESSAGE_LENGTH=${MAX_MESSAGE_LENGTH:-4096}
+      - SEARCH_LIMIT=${SEARCH_LIMIT:-5}
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.7}
+      - FAQ_SEARCH_LIMIT=${FAQ_SEARCH_LIMIT:-3}
+      - FAQ_CACHE_TTL=${FAQ_CACHE_TTL:-3600}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-30}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-2000}
+      # Кэширование моделей
+      - TRANSFORMERS_CACHE=/app/models_cache
+      - HF_HOME=/app/models_cache
+    volumes:
+      - document_uploads:/app/uploads
+      - ml_models_cache:/app/models_cache
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - poliom_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  # Админ-панель POLIOM
+  admin-panel:
+    build:
+      context: .
+      dockerfile: services/admin-panel/Dockerfile
+    container_name: poliom_admin_panel_local
+    ports:
+      - "${ADMIN_PANEL_PORT:-8001}:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-poliom_user}:${POSTGRES_PASSWORD:-poliom_password_123}@postgres:5432/${POSTGRES_DB:-poliom_local}
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-very_secret_key_for_local_development_only_change_in_production}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONPATH=/app
+      - ENVIRONMENT=local
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-52428800}
+      - ALLOWED_EXTENSIONS=pdf,docx,doc,txt,rtf
+      - ALLOWED_HOSTS=*
+      - CORS_ORIGINS=*
+      # Кэширование моделей
+      - TRANSFORMERS_CACHE=/app/models_cache
+      - HF_HOME=/app/models_cache
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+    volumes:
+      - document_uploads:/app/uploads
+      - ml_models_cache:/app/models_cache
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - poliom_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || wget --no-verbose --tries=1 --spider http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery worker для обработки документов
+  celery-worker:
+    build:
+      context: .
+      dockerfile: services/admin-panel/Dockerfile
+    container_name: poliom_celery_worker_local
+    command: sh -c "cd /app && celery -A celery_app worker --loglevel=info --concurrency=2"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-poliom_user}:${POSTGRES_PASSWORD:-poliom_password_123}@postgres:5432/${POSTGRES_DB:-poliom_local}
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONPATH=/app
+      - ENVIRONMENT=local
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-52428800}
+      - ALLOWED_EXTENSIONS=pdf,docx,doc,txt,rtf
+      # Кэширование моделей
+      - TRANSFORMERS_CACHE=/app/models_cache
+      - HF_HOME=/app/models_cache
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+    volumes:
+      - document_uploads:/app/uploads
+      - ml_models_cache:/app/models_cache
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - poliom_network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "cd /app && celery -A celery_app inspect ping"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  # PgAdmin для управления базой данных (опционально)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: poliom_pgadmin_local
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@poliom.local}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin123}
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "${PGADMIN_PORT:-8082}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    networks:
+      - poliom_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  document_uploads:
+    driver: local
+  ml_models_cache:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  poliom_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 

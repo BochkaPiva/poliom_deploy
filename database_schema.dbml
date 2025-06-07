@@ -1,0 +1,272 @@
+// POLIOM HR ASSISTANT DATABASE SCHEMA
+// DBML Format for dbdiagram.io
+// Use this file to create visual database diagrams at https://dbdiagram.io/
+
+Project "POLIOM HR Assistant" {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # POLIOM HR Assistant Database
+    
+    Система управления HR-документами с поддержкой:
+    - Векторного поиска (pgvector)
+    - Telegram бота для пользователей
+    - Административной панели
+    - Семантического поиска по документам
+    - Иерархического меню
+    - Полного аудита действий
+  '''
+}
+
+// ==================================================
+// ТАБЛИЦА: users (Пользователи Telegram)
+// ==================================================
+Table users {ё
+  id int [pk, increment, note: 'Первичный ключ']
+  telegram_id bigint [unique, not null, note: 'ID пользователя в Telegram']
+  username varchar(255) [note: 'Имя пользователя в Telegram']
+  first_name varchar(255) [note: 'Имя пользователя']
+  last_name varchar(255) [note: 'Фамилия пользователя']
+  is_active boolean [default: true, not null, note: 'Активность пользователя']
+  created_at timestamp [default: `now()`, not null, note: 'Дата регистрации']
+  last_activity timestamp [note: 'Последняя активность']
+  
+  indexes {
+    telegram_id [name: 'idx_users_telegram_id']
+    username [name: 'idx_users_username']
+    created_at [name: 'idx_users_created_at']
+  }
+  
+  Note: 'Пользователи Telegram бота'
+}
+
+// ==================================================
+// ТАБЛИЦА: admins (Администраторы)
+// ==================================================
+Table admins {
+  id int [pk, increment, note: 'Первичный ключ']
+  username varchar(100) [unique, not null, note: 'Логин администратора']
+  email varchar(255) [unique, not null, note: 'Email администратора']
+  hashed_password varchar(255) [not null, note: 'Хешированный пароль']
+  full_name varchar(255) [not null, note: 'Полное имя']
+  is_active boolean [default: true, not null, note: 'Активность аккаунта']
+  created_at timestamp [default: `now()`, not null, note: 'Дата создания']
+  updated_at timestamp [default: `now()`, note: 'Дата обновления']
+  last_login timestamp [note: 'Последний вход']
+  
+  indexes {
+    username [name: 'idx_admins_username']
+    email [name: 'idx_admins_email']
+    created_at [name: 'idx_admins_created_at']
+  }
+  
+  Note: 'Администраторы системы'
+}
+
+// ==================================================
+// ТАБЛИЦА: documents (Документы)
+// ==================================================
+Table documents {
+  id int [pk, increment, note: 'Первичный ключ']
+  filename varchar(255) [not null, note: 'Имя файла в системе']
+  original_filename varchar(255) [not null, note: 'Оригинальное имя файла']
+  file_path varchar(500) [not null, note: 'Путь к файлу']
+  file_size int [not null, note: 'Размер файла в байтах']
+  file_type varchar(50) [not null, note: 'Тип файла (pdf, docx, txt, doc)']
+  title varchar(500) [note: 'Заголовок документа']
+  description text [note: 'Описание документа']
+  content text [note: 'Извлеченный текст']
+  processing_status varchar(50) [default: 'pending', not null, note: 'Статус обработки']
+  error_message text [note: 'Сообщение об ошибке']
+  uploaded_by int [not null, ref: > admins.id, note: 'ID администратора']
+  created_at timestamp [default: `now()`, not null, note: 'Дата создания']
+  updated_at timestamp [default: `now()`, note: 'Дата обновления']
+  processed_at timestamp [note: 'Дата обработки']
+  chunks_count int [default: 0, not null, note: 'Количество чанков']
+  
+  indexes {
+    filename [name: 'idx_documents_filename']
+    file_type [name: 'idx_documents_file_type']
+    processing_status [name: 'idx_documents_processing_status']
+    uploaded_by [name: 'idx_documents_uploaded_by']
+    created_at [name: 'idx_documents_created_at']
+  }
+  
+  Note: 'Загруженные документы'
+}
+
+// ==================================================
+// ТАБЛИЦА: document_chunks (Чанки документов)
+// ==================================================
+Table document_chunks {
+  id int [pk, increment, note: 'Первичный ключ']
+  document_id int [not null, ref: > documents.id, note: 'ID документа']
+  chunk_index int [not null, note: 'Порядковый номер чанка']
+  content text [not null, note: 'Текст чанка']
+  content_length int [not null, note: 'Длина текста в символах']
+  embedding text [note: 'Вектор эмбеддинга (JSON массив)']
+  chunk_metadata text [note: 'Метаданные в JSON']
+  created_at timestamp [default: `now()`, not null, note: 'Дата создания']
+  
+  indexes {
+    document_id [name: 'idx_document_chunks_document_id']
+    chunk_index [name: 'idx_document_chunks_chunk_index']
+    content_length [name: 'idx_document_chunks_content_length']
+    created_at [name: 'idx_document_chunks_created_at']
+  }
+  
+  Note: 'Чанки документов для векторного поиска'
+}
+
+// ==================================================
+// ТАБЛИЦА: menu_sections (Разделы меню)
+// ==================================================
+Table menu_sections {
+  id int [pk, increment, note: 'Первичный ключ']
+  title varchar(255) [not null, note: 'Название раздела']
+  description text [note: 'Описание раздела']
+  order_index int [default: 0, not null, note: 'Порядок отображения']
+  is_active boolean [default: true, not null, note: 'Активность раздела']
+  created_at timestamp [default: `now()`, not null, note: 'Дата создания']
+  updated_at timestamp [default: `now()`, note: 'Дата обновления']
+  
+  indexes {
+    title [name: 'idx_menu_sections_title']
+    order_index [name: 'idx_menu_sections_order_index']
+    is_active [name: 'idx_menu_sections_is_active']
+    created_at [name: 'idx_menu_sections_created_at']
+  }
+  
+  Note: 'Разделы меню (первый уровень)'
+}
+
+// ==================================================
+// ТАБЛИЦА: menu_items (Элементы меню)
+// ==================================================
+Table menu_items {
+  id int [pk, increment, note: 'Первичный ключ']
+  section_id int [not null, ref: > menu_sections.id, note: 'ID раздела меню']
+  title varchar(255) [not null, note: 'Название элемента']
+  content text [not null, note: 'Содержимое ответа']
+  order_index int [default: 0, not null, note: 'Порядок в разделе']
+  is_active boolean [default: true, not null, note: 'Активность элемента']
+  source_document_ids text [note: 'ID документов-источников (JSON)']
+  source_document_names text [note: 'Названия документов (JSON)']
+  source_chunk_ids text [note: 'ID чанков-источников (JSON)']
+  created_at timestamp [default: `now()`, not null, note: 'Дата создания']
+  updated_at timestamp [default: `now()`, note: 'Дата обновления']
+  
+  indexes {
+    section_id [name: 'idx_menu_items_section_id']
+    title [name: 'idx_menu_items_title']
+    order_index [name: 'idx_menu_items_order_index']
+    is_active [name: 'idx_menu_items_is_active']
+    created_at [name: 'idx_menu_items_created_at']
+  }
+  
+  Note: 'Элементы меню (второй уровень)'
+}
+
+// ==================================================
+// ТАБЛИЦА: query_logs (Логи запросов)
+// ==================================================
+Table query_logs {
+  id int [pk, increment, note: 'Первичный ключ']
+  user_id int [not null, ref: > users.id, note: 'ID пользователя']
+  query_text text [not null, note: 'Текст запроса']
+  response_text text [note: 'Текст ответа']
+  response_time float [note: 'Время ответа в секундах']
+  similarity_score float [note: 'Оценка релевантности']
+  documents_used text [note: 'Использованные документы (JSON)']
+  created_at timestamp [default: `now()`, not null, note: 'Дата создания']
+  
+  indexes {
+    user_id [name: 'idx_query_logs_user_id']
+    created_at [name: 'idx_query_logs_created_at']
+    response_time [name: 'idx_query_logs_response_time']
+    similarity_score [name: 'idx_query_logs_similarity_score']
+  }
+  
+  Note: 'Логирование запросов пользователей'
+}
+
+// ==================================================
+// СВЯЗИ МЕЖДУ ТАБЛИЦАМИ
+// ==================================================
+
+// Один админ может загрузить много документов
+Ref: admins.id < documents.uploaded_by [delete: restrict]
+
+// Один документ содержит много чанков
+Ref: documents.id < document_chunks.document_id [delete: cascade]
+
+// Один раздел меню включает много элементов
+Ref: menu_sections.id < menu_items.section_id [delete: cascade]
+
+// Один пользователь может сделать много запросов
+Ref: users.id < query_logs.user_id [delete: cascade]
+
+// ==================================================
+// ЗАМЕТКИ О СИСТЕМЕ
+// ==================================================
+
+Note relationships {
+  '''
+  ## Основные связи в системе:
+  
+  ### 1. Админы → Документы (1:M)
+  - Каждый администратор может загружать документы
+  - При удалении админа документы сохраняются (RESTRICT)
+  
+  ### 2. Документы → Чанки (1:M)
+  - Каждый документ разбивается на чанки для поиска
+  - При удалении документа все чанки удаляются (CASCADE)
+  
+  ### 3. Разделы → Элементы меню (1:M)
+  - Иерархическая структура меню
+  - При удалении раздела все элементы удаляются (CASCADE)
+  
+  ### 4. Пользователи → Логи запросов (1:M)
+  - Полное логирование всех запросов
+  - При удалении пользователя логи удаляются (CASCADE)
+  '''
+}
+
+Note features {
+  '''
+  ## Ключевые возможности системы:
+  
+  ### 🔍 Векторный поиск
+  - Поддержка pgvector для семантического поиска
+  - Эмбеддинги хранятся в поле embedding
+  - Полнотекстовый поиск по содержимому документов
+  
+  ### 📊 Аналитика и мониторинг
+  - Логирование времени ответа
+  - Оценка релевантности результатов
+  - Отслеживание использования документов
+  - Статистика активности пользователей
+  
+  ### 🔐 Безопасность
+  - Хеширование паролей администраторов
+  - Разграничение прав доступа
+  - Аудит всех операций
+  
+  ### ⚡ Производительность
+  - Индексы на критических полях
+  - Оптимизированные запросы
+  - Кеширование часто используемых данных
+  '''
+}
+
+Note document_processing {
+  '''
+  ## Процесс обработки документов:
+  
+  1. **Загрузка** - Администратор загружает документ
+  2. **Извлечение текста** - Система извлекает текст из файла
+  3. **Разбиение на чанки** - Текст разбивается на логические части
+  4. **Создание эмбеддингов** - Генерируются векторные представления
+  5. **Индексация** - Чанки индексируются для быстрого поиска
+  6. **Готов к использованию** - Документ доступен для поиска
+  '''
+} 
