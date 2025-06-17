@@ -15,8 +15,8 @@ from pathlib import Path
 def check_postgres_pgvector():
     """Проверка PostgreSQL и расширения pgvector"""
     try:
-        # Параметры подключения из переменных окружения
-        db_url = os.getenv('DATABASE_URL', 'postgresql://poliom_user:poliom_password_123@localhost:5432/poliom_local')
+        # Подключение к базе данных
+        db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:poliom_secure_2024_db_pass@localhost:5432/poliom_local')
         
         # Парсим URL
         from urllib.parse import urlparse

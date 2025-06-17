@@ -201,7 +201,7 @@ main() {
     echo "======================================"
     echo "Админ-панель: http://localhost:8001"
     echo "PgAdmin: http://localhost:8082"
-    echo "Логин админ-панели: admin / admin123"
+    echo "Логин админ-панели: admin / poliom_\$487%0_admin"
     echo ""
     echo "Для проверки логов используйте:"
     echo "  docker-compose -f docker-compose.local.yml logs -f"

@@ -53,35 +53,36 @@ def check_and_create_admin():
         for admin in admins:
             print(f"  - ID: {admin.id}, Username: {admin.username}, Email: {admin.email}, Active: {admin.is_active}")
         
-        # Если нет администраторов, создаем
-        if len(admins) == 0:
-            print("🔧 Создаем администратора по умолчанию...")
+        # Создаем администратора по умолчанию если его нет
+        admin_count = db.query(Admin).count()
+        if admin_count == 0:
+            print("👤 Администраторов не найдено. Создаем по умолчанию...")
             default_admin = Admin(
                 username="admin",
-                email="admin@example.com",
-                hashed_password=get_password_hash("admin123"),
-                full_name="Администратор по умолчанию",
+                email="admin@poliom.com",
+                hashed_password=get_password_hash("poliom_$487%0_admin"),
+                full_name="Системный администратор",
                 is_active=True
             )
             db.add(default_admin)
             db.commit()
-            db.refresh(default_admin)
-            print(f"✅ Создан администратор: {default_admin.username} (ID: {default_admin.id})")
+            print("✅ Создан администратор по умолчанию")
         
-        # Проверяем пароль для admin
+        # Проверяем администратора 'admin'
         admin_user = db.query(Admin).filter(Admin.username == "admin").first()
         if admin_user:
-            print(f"\n🔐 Проверяем пароль для пользователя 'admin'...")
-            password_check = verify_password("admin123", admin_user.hashed_password)
-            print(f"  - Пароль 'admin123' корректен: {password_check}")
-            print(f"  - Хеш пароля: {admin_user.hashed_password[:50]}...")
+            print(f"✅ Найден администратор: {admin_user.username}")
+            print(f"   Email: {admin_user.email}")
+            print(f"   Активен: {admin_user.is_active}")
+            print(f"   Полное имя: {admin_user.full_name}")
             
-            # Пересоздаем хеш пароля для уверенности
-            new_hash = get_password_hash("admin123")
-            print(f"  - Новый хеш: {new_hash[:50]}...")
+            # Проверяем пароль
+            password_check = verify_password("poliom_$487%0_admin", admin_user.hashed_password)
+            print(f"  - Пароль 'poliom_$487%0_admin' корректен: {password_check}")
             
             if not password_check:
                 print("🔧 Обновляем пароль...")
+                new_hash = get_password_hash("poliom_$487%0_admin")
                 admin_user.hashed_password = new_hash
                 db.commit()
                 print("✅ Пароль обновлен")

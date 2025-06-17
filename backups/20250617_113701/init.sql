@@ -122,11 +122,11 @@ CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding_vector
 ON document_chunks USING ivfflat (embedding_vector vector_cosine_ops) 
 WITH (lists = 100);
 
--- Создание администратора по умолчанию (пароль: poliom_secure_487_admin)
+-- Создание администратора по умолчанию (пароль: admin123)
 INSERT INTO admins (username, email, hashed_password, full_name) 
 VALUES (
     'admin', 
     'admin@poliom.com', 
-    '$2b$12$Yeclk5P5R.ZOqkybU/Z/m.Xlrqk.m0b9uQ/A3UblOGi5g7DIUYPW2', 
+    '$2b$12$ito7W1i3OD1GJj1rb3yGgO5qAH/BWuNH/BXoI95s6eIq9dbU2gIDa', 
     'Системный администратор'
 ) ON CONFLICT (username) DO NOTHING; 

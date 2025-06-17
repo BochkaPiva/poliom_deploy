@@ -95,6 +95,9 @@ async def auth_exception_handler(request: Request, exc: HTTPException):
 @app.on_event("startup")
 async def startup_event():
     """Инициализация при запуске приложения"""
+    # Очищаем метаданные SQLAlchemy для принудительного обновления схемы
+    Base.metadata.clear()
+    
     # Создаем таблицы
     Base.metadata.create_all(bind=engine)
     logger.info("База данных инициализирована")
@@ -107,13 +110,13 @@ async def startup_event():
             default_admin = Admin(
                 username="admin",
                 email="admin@example.com",
-                hashed_password=get_password_hash("admin123"),
+                hashed_password=get_password_hash("poliom_secure_487_admin"),
                 full_name="Администратор по умолчанию",
                 is_active=True
             )
             db.add(default_admin)
             db.commit()
-            logger.info("Создан администратор по умолчанию: admin/admin123")
+            logger.info("Создан администратор по умолчанию: admin/poliom_secure_487_admin")
     except Exception as e:
         logger.error(f"Ошибка создания администратора по умолчанию: {e}")
     finally:
@@ -267,7 +270,21 @@ async def dashboard(request: Request, db: Session = Depends(get_db), admin: Admi
         recent_documents = db.query(Document).order_by(Document.created_at.desc()).limit(5).all()
         
         # Последние запросы пользователей
-        recent_queries = db.query(QueryLog).order_by(QueryLog.created_at.desc()).limit(10).all()
+        recent_queries_result = db.execute(text("""
+            SELECT id, user_id, query, created_at 
+            FROM query_logs 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        """))
+        recent_queries = [
+            {
+                'id': row.id,
+                'user_id': row.user_id, 
+                'query': row.query,
+                'created_at': row.created_at
+            }
+            for row in recent_queries_result
+        ]
         
         return templates.TemplateResponse("dashboard.html", {
             "request": request,
@@ -476,9 +493,19 @@ async def users_page(request: Request, db: Session = Depends(get_db), admin: Adm
         
         # Получаем статистику по пользователям
         for user in users:
-            user.queries_count = db.query(QueryLog).filter(QueryLog.user_id == user.id).count()
-            last_query = db.query(QueryLog).filter(QueryLog.user_id == user.id).order_by(QueryLog.created_at.desc()).first()
-            user.last_query_date = last_query.created_at if last_query else None
+            # Используем прямой SQL для подсчета запросов
+            queries_count_result = db.execute(
+                text("SELECT COUNT(*) FROM query_logs WHERE user_id = :user_id"),
+                {"user_id": user.id}
+            ).scalar()
+            user.queries_count = queries_count_result or 0
+            
+            # Используем прямой SQL для получения последнего запроса
+            last_query_result = db.execute(
+                text("SELECT created_at FROM query_logs WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1"),
+                {"user_id": user.id}
+            ).fetchone()
+            user.last_query_date = last_query_result.created_at if last_query_result else None
         
         return templates.TemplateResponse("users.html", {
             "request": request,

@@ -7,18 +7,18 @@ services:
     container_name: poliom_postgres_local
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-poliom_local}
-      - POSTGRES_USER=${POSTGRES_USER:-poliom_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-poliom_password_123}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-poliom_secure_2024_db_pass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
       - "5432:5432"
     restart: unless-stopped
     networks:
       - poliom_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poliom_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -49,7 +49,7 @@ services:
     container_name: poliom_telegram_bot_local
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-poliom_user}:${POSTGRES_PASSWORD:-poliom_password_123}@postgres:5432/${POSTGRES_DB:-poliom_local}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-poliom_secure_2024_db_pass}@postgres:5432/${POSTGRES_DB:-poliom_local}
       - REDIS_URL=redis://redis:6379/0
       - GIGACHAT_API_KEY=${GIGACHAT_API_KEY:-}
       - GIGACHAT_SCOPE=${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
@@ -58,8 +58,9 @@ services:
       - ENVIRONMENT=local
       - BOT_TIMEOUT=${BOT_TIMEOUT:-30}
       - MAX_MESSAGE_LENGTH=${MAX_MESSAGE_LENGTH:-4096}
-      - SEARCH_LIMIT=${SEARCH_LIMIT:-5}
-      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.7}
+      - SEARCH_LIMIT=${SEARCH_LIMIT:-15}
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.3}
+      - MIN_SIMILARITY_THRESHOLD=${MIN_SIMILARITY_THRESHOLD:-0.25}
       - FAQ_SEARCH_LIMIT=${FAQ_SEARCH_LIMIT:-3}
       - FAQ_CACHE_TTL=${FAQ_CACHE_TTL:-3600}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-30}
@@ -93,11 +94,11 @@ services:
     ports:
       - "${ADMIN_PANEL_PORT:-8001}:8000"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-poliom_user}:${POSTGRES_PASSWORD:-poliom_password_123}@postgres:5432/${POSTGRES_DB:-poliom_local}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-poliom_secure_2024_db_pass}@postgres:5432/${POSTGRES_DB:-poliom_local}
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=${SECRET_KEY:-very_secret_key_for_local_development_only_change_in_production}
+      - ADMIN_SECRET_KEY=${ADMIN_SECRET_KEY:-4spbf2OdSr2mMGe62BKZtOL3AxQp8OpxVHDattwyskM26VboglDMUrMPdqz4LFsS}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-poliom_secure_487_admin}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - PYTHONPATH=/app
       - ENVIRONMENT=local
@@ -134,7 +135,7 @@ services:
     container_name: poliom_celery_worker_local
     command: sh -c "cd /app && celery -A celery_app worker --loglevel=info --concurrency=2"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-poliom_user}:${POSTGRES_PASSWORD:-poliom_password_123}@postgres:5432/${POSTGRES_DB:-poliom_local}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-poliom_secure_2024_db_pass}@postgres:5432/${POSTGRES_DB:-poliom_local}
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - PYTHONPATH=/app
@@ -167,8 +168,8 @@ services:
     image: dpage/pgadmin4:latest
     container_name: poliom_pgadmin_local
     environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@poliom.local}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin123}
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@example.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-pgadmin_poliom_2024_secure_pass}
       - PGADMIN_CONFIG_SERVER_MODE=False
     ports:
       - "${PGADMIN_PORT:-8082}:80"

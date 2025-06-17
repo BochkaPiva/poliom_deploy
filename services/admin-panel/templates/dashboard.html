@@ -157,16 +157,16 @@
                                 {% for query in recent_queries %}
                                 <tr>
                                     <td>
-                                        <small>ID: {{ query.user_id }}</small>
+                                        <small>ID: {{ query['user_id'] }}</small>
                                     </td>
                                     <td>
                                         <div class="text-truncate" style="max-width: 200px;">
-                                            {{ query.query_text }}
+                                            {{ query['query'] }}
                                         </div>
                                     </td>
                                     <td>
                                         <small class="text-muted">
-                                            {{ query.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                            {{ query['created_at'].strftime('%d.%m.%Y %H:%M') }}
                                         </small>
                                     </td>
                                 </tr>

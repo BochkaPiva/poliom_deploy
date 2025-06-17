@@ -1,87 +1,93 @@
 #!/usr/bin/env python3
 """
-Скрипт для создания администратора admin/admin123
+Скрипт для создания администратора admin/poliom_$487%0_admin
+Используется для первоначальной настройки системы
 """
 
 import os
 import sys
 from pathlib import Path
-
-# Загружаем переменные окружения из .env
 from dotenv import load_dotenv
-load_dotenv('.env')
 
-# Добавляем пути к модулям
+# Добавляем путь к shared модулям
 current_dir = Path(__file__).parent
+project_root = current_dir.parent.parent
+sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(current_dir))
-sys.path.insert(0, str(current_dir / "shared"))
 
-# Импортируем shared модули
-try:
-    # Пробуем импорт для Docker
-    from shared.utils.auth import get_password_hash, verify_password
-    from shared.models.database import SessionLocal, engine, Base
-    from shared.models import Admin
-except ImportError:
-    # Если не получилось, пробуем локальный импорт
-    from utils.auth import get_password_hash, verify_password
-    from models.database import SessionLocal, engine, Base
-    from models import Admin
+# Загружаем переменные окружения
+env_path = project_root / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"✅ Загружен .env файл: {env_path}")
+else:
+    print(f"⚠️ .env файл не найден: {env_path}")
 
-def create_admin():
-    """Создаем администратора admin/admin123"""
-    print("🔧 Создаем администратора admin/admin123...")
+from shared.models.database import get_session, init_database
+from shared.models.admin import Admin
+from shared.utils.auth import get_password_hash, verify_password
+
+def create_default_admin():
+    """Создаем администратора admin/poliom_$487%0_admin"""
+    print("🔧 Создаем администратора admin/poliom_$487%0_admin...")
     
-    db = SessionLocal()
     try:
-        # Проверяем, есть ли уже admin
-        existing_admin = db.query(Admin).filter(Admin.username == "admin").first()
+        # Инициализируем базу данных
+        init_database()
         
-        if existing_admin:
-            print("⚠️  Администратор 'admin' уже существует!")
-            print(f"   ID: {existing_admin.id}")
-            print(f"   Email: {existing_admin.email}")
-            print(f"   Active: {existing_admin.is_active}")
-            
-            # Обновляем пароль
-            print("🔧 Обновляем пароль...")
-            existing_admin.hashed_password = get_password_hash("admin123")
-            db.commit()
-            print("✅ Пароль обновлен!")
-            
-        else:
-            # Создаем нового администратора
-            new_admin = Admin(
-                username="admin",
-                email="admin@example.com",
-                hashed_password=get_password_hash("admin123"),
-                full_name="Администратор по умолчанию",
-                is_active=True
-            )
-            db.add(new_admin)
-            db.commit()
-            db.refresh(new_admin)
-            print(f"✅ Создан администратор: {new_admin.username} (ID: {new_admin.id})")
+        # Получаем сессию
+        db = get_session()
         
-        # Проверяем пароль
-        admin_user = db.query(Admin).filter(Admin.username == "admin").first()
-        if admin_user:
-            password_check = verify_password("admin123", admin_user.hashed_password)
-            print(f"🔐 Проверка пароля 'admin123': {password_check}")
+        try:
+            # Проверяем, есть ли уже администратор admin
+            existing_admin = db.query(Admin).filter(Admin.username == "admin").first()
+            
+            if existing_admin:
+                print("👤 Администратор 'admin' уже существует. Обновляем пароль...")
+                # Обновляем пароль
+                existing_admin.hashed_password = get_password_hash("poliom_$487%0_admin")
+                existing_admin.is_active = True
+                existing_admin.email = "admin@poliom.com"
+                existing_admin.full_name = "Системный администратор"
+                db.commit()
+                print("✅ Пароль администратора обновлен")
+            else:
+                print("👤 Создаем нового администратора...")
+                # Создаем нового администратора
+                admin_user = Admin(
+                    username="admin",
+                    email="admin@poliom.com", 
+                    hashed_password=get_password_hash("poliom_$487%0_admin"),
+                    full_name="Системный администратор",
+                    is_active=True
+                )
+                
+                db.add(admin_user)
+                db.commit()
+                print("✅ Администратор создан")
+            
+            # Проверяем корректность пароля
+            admin_user = db.query(Admin).filter(Admin.username == "admin").first()
+            password_check = verify_password("poliom_$487%0_admin", admin_user.hashed_password)
+            print(f"🔐 Проверка пароля 'poliom_$487%0_admin': {password_check}")
             
             if password_check:
-                print("✅ Администратор готов к использованию!")
+                print("🎉 Администратор успешно создан!")
+                print("📝 Данные для входа:")
                 print("   Логин: admin")
-                print("   Пароль: admin123")
+                print("   Пароль: poliom_$487%0_admin")
+                print("   URL: http://localhost:8001")
             else:
-                print("❌ Ошибка проверки пароля!")
-        
+                print("❌ Ошибка: пароль не работает")
+            
+        finally:
+            db.close()
+            
     except Exception as e:
         print(f"❌ Ошибка: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        db.close()
+        return False
+    
+    return True
 
 if __name__ == "__main__":
-    create_admin() 
+    create_default_admin() 

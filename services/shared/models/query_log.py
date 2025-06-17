@@ -13,12 +13,15 @@ class QueryLog(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
-    query_text = Column(Text, nullable=False)
-    response_text = Column(Text, nullable=True)
+    query = Column(Text, nullable=False)
+    response = Column(Text, nullable=True)
     response_time = Column(Float, nullable=True, index=True)
     similarity_score = Column(Float, nullable=True, index=True)
     documents_used = Column(Text, nullable=True)  # JSON список использованных документов
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     
+    # Связь с пользователем
+    user = relationship("User", back_populates="query_logs")
+    
     def __repr__(self):
-        return f"<QueryLog(id={self.id}, user_id={self.user_id}, query='{self.query_text[:50]}...')>" 
+        return f"<QueryLog(id={self.id}, user_id={self.user_id}, query='{self.query[:50]}...')>" 

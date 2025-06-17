@@ -1,5 +1,5 @@
--- Инициализация базы данных POLIOM
--- Автоматическое создание расширения pgvector
+-- Инициализация расширения pgvector для PostgreSQL
+-- Простая инициализация для локального развертывания
 
 -- Создаем расширение pgvector если его нет
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -11,5 +11,5 @@ BEGIN
         RAISE EXCEPTION 'Расширение pgvector не установлено! Проверьте образ PostgreSQL.';
     END IF;
     
-    RAISE NOTICE 'Расширение pgvector успешно установлено и готово к использованию.';
+    RAISE NOTICE 'Расширение pgvector установлено и готово к использованию.';
 END $$; 

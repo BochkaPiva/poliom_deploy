@@ -66,11 +66,11 @@ LOCAL_IP=$(hostname -I | awk '{print $1}')
 
 echo "🌐 Админ-панель: http://$LOCAL_IP:8001"
 echo "   Логин: admin"
-echo "   Пароль: admin123"
+echo "   Пароль: poliom_\$487%0_admin"
 echo
 echo "🗄️ PgAdmin: http://$LOCAL_IP:8082"
 echo "   Email: admin@poliom.local"
-echo "   Пароль: admin123"
+echo "   Пароль: poliom_secure_487_admin"
 echo
 echo "🤖 Telegram бот готов к работе!"
 echo

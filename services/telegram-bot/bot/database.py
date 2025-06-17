@@ -166,7 +166,7 @@ def get_or_create_user(telegram_id: int, username: str = None, first_name: str =
     finally:
         db.close()
 
-def log_user_query(user_id: int, query_text: str, response_text: str, 
+def log_user_query(user_id: int, query: str, response_text: str, 
                    response_time: float = None, similarity_score: float = None, 
                    documents_used: str = None) -> bool:
     """
@@ -174,7 +174,7 @@ def log_user_query(user_id: int, query_text: str, response_text: str,
     
     Args:
         user_id: ID пользователя
-        query_text: Текст запроса
+        query: Текст запроса
         response_text: Текст ответа
         response_time: Время ответа в секундах
         similarity_score: Оценка релевантности
@@ -186,16 +186,16 @@ def log_user_query(user_id: int, query_text: str, response_text: str,
     db = next(get_db_session())
     
     try:
-        log_entry = QueryLog(
+        query_log = QueryLog(
             user_id=user_id,
-            query_text=query_text,
-            response_text=response_text,
+            query=query,
+            response=response_text,
             response_time=response_time,
             similarity_score=similarity_score,
             documents_used=documents_used
         )
         
-        db.add(log_entry)
+        db.add(query_log)
         db.commit()
         
         return True

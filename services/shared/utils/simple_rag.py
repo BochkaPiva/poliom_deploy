@@ -7,6 +7,8 @@ from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+import json
+import datetime
 
 # Исправляем импорт на абсолютный
 try:
@@ -58,6 +60,8 @@ class SimpleRAG:
         self.logger.info("Загружаем модель эмбеддингов...")
         self.embedding_model = SentenceTransformer('cointegrated/rubert-tiny2')
         self.logger.info(f"Модель эмбеддингов загружена! Настройки: similarity_threshold={self.similarity_threshold}, search_limit={self.search_limit}, min_similarity={self.min_similarity}")
+        self._relevant_chunks_for_logging: List[Dict] = []
+        self._similarity_score_for_logging: float = 0.0
         
     def create_embedding(self, text: str) -> List[float]:
         """Создание эмбеддинга для текста"""
@@ -601,33 +605,40 @@ class SimpleRAG:
         Returns:
             Dict с ответом и метаданными
         """
+        start_time = datetime.datetime.now()
+
         try:
-            self.logger.info(f"Обрабатываем вопрос: {question[:100]}...")
+            self.logger.info(f"Обрабатываем вопрос от user_id={user_id}: {question[:100]}...")
             
-            # 1. Ищем релевантные документы
-            relevant_chunks = self.search_relevant_chunks(question, limit=self.search_limit)  # Используем настраиваемый лимит
+            relevant_chunks = self.search_relevant_chunks(question, limit=self.search_limit)
+
+            self._relevant_chunks_for_logging = relevant_chunks
+            if relevant_chunks:
+                total_similarity = sum(c['similarity'] for c in relevant_chunks)
+                self._similarity_score_for_logging = total_similarity / len(relevant_chunks) if relevant_chunks else 0.0
+            else:
+                self._similarity_score_for_logging = 0.0
+
             
             if not relevant_chunks:
-                return {
+                if user_id:
+                    response_duration = (datetime.datetime.now() - start_time).total_seconds()
+                    self._log_query(user_id, question, "NO_CHUNKS_FOUND", response_duration)
+                
+                return { 
                     'answer': 'К сожалению, я не нашел информации по вашему вопросу в корпоративной базе знаний. Попробуйте переформулировать вопрос или обратитесь к HR-отделу.',
-                    'sources': [],
-                    'chunks': [],
-                    'files': [],
-                    'success': True,
-                    'tokens_used': 0
+                    'sources': [], 'chunks': [], 'files': [],
+                    'success': True, 'tokens_used': 0
                 }
             
-            # 2. Улучшенное формирование контекста - берем лучшие чанки
-            top_chunks = relevant_chunks[:10]  # Ограничиваем до 10 лучших чанков
+            top_chunks = relevant_chunks[:10]
             context = self.format_context(top_chunks)
             
-            # ОТЛАДКА: Выводим контекст в лог
             self.logger.info(f"🔍 КОНТЕКСТ ДЛЯ LLM (длина: {len(context)} символов):")
             self.logger.info("="*80)
             self.logger.info(context[:2000] + "..." if len(context) > 2000 else context)
             self.logger.info("="*80)
             
-            # 3. Получаем ответ от LLM с улучшенным промптом
             enhanced_prompt = f"""
 Вопрос: {question}
 
@@ -647,17 +658,16 @@ class SimpleRAG:
             )
             
             if not llm_response.success:
-                return {
+                if user_id:
+                    response_duration = (datetime.datetime.now() - start_time).total_seconds()
+                    self._log_query(user_id, question, f"LLM_ERROR: {llm_response.error}", response_duration)
+                
+                return { 
                     'answer': 'Извините, произошла ошибка при генерации ответа. Попробуйте позже.',
-                    'sources': [],
-                    'chunks': [],
-                    'files': [],
-                    'success': False,
-                    'error': llm_response.error,
-                    'tokens_used': 0
+                    'sources': [], 'chunks': [], 'files': [],
+                    'success': False, 'error': llm_response.error, 'tokens_used': 0
                 }
             
-            # 4. Формируем источники и файлы с дедупликацией
             sources = []
             files = []
             seen_documents = set()
@@ -668,61 +678,43 @@ class SimpleRAG:
                 ).first()
                 
                 if document and document.title not in seen_documents:
-                    sources.append({
-                        'title': document.title,
-                        'chunk_index': chunk['chunk_index'],
-                        'document_id': document.id
-                    })
-                    
-                    # ОТЛАДКА: Логируем данные документа
+                    sources.append({ 'title': document.title, 'chunk_index': chunk['chunk_index'], 'document_id': document.id })
                     self.logger.info(f"📄 ДОКУМЕНТ ID {document.id}:")
                     self.logger.info(f"  - title: '{document.title}'")
                     self.logger.info(f"  - file_path: '{document.file_path}'")
                     self.logger.info(f"  - original_filename: '{document.original_filename}'")
                     self.logger.info(f"  - file_type: '{document.file_type}'")
                     self.logger.info(f"  - file_size: {document.file_size}")
-                    
-                    # Добавляем полную информацию о файле для прикрепления
                     files.append({
-                        'title': document.title,
-                        'file_path': document.file_path,  # Полный путь к файлу
-                        'document_id': document.id,
-                        'similarity': chunk['similarity'],
-                        'file_size': document.file_size,
-                        'file_type': document.file_type,
+                        'title': document.title, 'file_path': document.file_path, 'document_id': document.id,
+                        'similarity': chunk['similarity'], 'file_size': document.file_size, 'file_type': document.file_type,
                         'original_filename': document.original_filename
                     })
-                    
                     seen_documents.add(document.title)
             
-            # 5. Постобработка ответа для улучшения форматирования
             formatted_answer = self._post_process_answer(llm_response.text)
 
-            # 6. Логируем запрос (опционально)
             if user_id:
-                self._log_query(user_id, question, formatted_answer, len(relevant_chunks))
+                response_duration = (datetime.datetime.now() - start_time).total_seconds()
+                self._log_query(user_id, question, formatted_answer, response_duration)
             
             return {
-                'answer': formatted_answer,
-                'sources': sources,
-                'chunks': relevant_chunks,
-                'files': files[:5],  # Ограничиваем до 5 файлов
-                'success': True,
-                'tokens_used': llm_response.tokens_used,
-                'chunks_found': len(relevant_chunks),
-                'context_length': len(context)
+                'answer': formatted_answer, 'sources': sources, 'chunks': relevant_chunks,
+                'files': files[:5], 'success': True, 'tokens_used': llm_response.tokens_used,
+                'chunks_found': len(relevant_chunks), 'context_length': len(context)
             }
             
         except Exception as e:
-            self.logger.error(f"Ошибка в answer_question: {str(e)}")
+            self.logger.error(f"Ошибка в answer_question: {str(e)}", exc_info=True)
+            
+            if user_id:
+                response_duration = (datetime.datetime.now() - start_time).total_seconds()
+                self._log_query(user_id, question, f"SYSTEM_ERROR: {str(e)}", response_duration)
+            
             return {
                 'answer': 'Произошла техническая ошибка. Обратитесь к администратору.',
-                'sources': [],
-                'chunks': [],
-                'files': [],
-                'success': False,
-                'error': str(e),
-                'tokens_used': 0
+                'sources': [], 'chunks': [], 'files': [],
+                'success': False, 'error': str(e), 'tokens_used': 0
             }
     
     def _post_process_answer(self, answer: str) -> str:
@@ -771,22 +763,49 @@ class SimpleRAG:
         
         return '. '.join(final_sentences)
     
-    def _log_query(self, user_id: int, question: str, answer: str, chunks_count: int):
+    def _log_query(self, user_id: int, question: str, answer: str, response_duration: float):
         """Логирование запроса пользователя"""
         try:
             from shared.models.query_log import QueryLog
             
-            log_entry = QueryLog(
+            relevant_chunks_for_log = self._relevant_chunks_for_logging
+            similarity_score = self._similarity_score_for_logging
+            
+            # Извлекаем названия документов
+            documents_used_titles = []
+            if relevant_chunks_for_log:
+                # Получаем уникальные названия документов из чанков
+                seen_titles = set()
+                for chunk in relevant_chunks_for_log:
+                    doc_title = chunk.get('document_title', 'Неизвестный документ')
+                    if doc_title not in seen_titles:
+                        documents_used_titles.append(doc_title)
+                        seen_titles.add(doc_title)
+            
+            documents_used_str = ", ".join(documents_used_titles) if documents_used_titles else None
+
+            query_log = QueryLog(
                 user_id=user_id,
-                query_text=question,
-                response_text=answer
+                query=question,
+                response=answer,
+                response_time=response_duration,
+                similarity_score=similarity_score,
+                documents_used=documents_used_str
             )
             
-            self.db_session.add(log_entry)
+            self.db_session.add(query_log)
             self.db_session.commit()
-            
+            self.logger.info(f"Запрос для user_id={user_id} успешно залогирован.")
+
         except Exception as e:
-            self.logger.error(f"Ошибка логирования запроса: {str(e)}")
+            self.logger.error(f"Ошибка логирования запроса: {str(e)}", exc_info=True)
+            try:
+                self.db_session.rollback()
+            except Exception as rb_e:
+                self.logger.error(f"Не удалось откатить транзакцию после ошибки логирования: {rb_e}")
+        finally:
+            self._relevant_chunks_for_logging = []
+            self._similarity_score_for_logging = 0.0
     
     def health_check(self) -> Dict[str, bool]:
         """Проверка работоспособности всех компонентов"""

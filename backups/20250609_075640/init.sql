@@ -79,8 +79,7 @@ CREATE TABLE IF NOT EXISTS menu_sections (
     icon VARCHAR(50),
     order_index INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
 -- Таблица элементов меню
@@ -91,11 +90,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
     content TEXT NOT NULL,
     order_index INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-    source_document_ids TEXT,
-    source_document_names TEXT,
-    source_chunk_ids TEXT,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
 -- Создание индексов
@@ -122,11 +117,11 @@ CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding_vector
 ON document_chunks USING ivfflat (embedding_vector vector_cosine_ops) 
 WITH (lists = 100);
 
--- Создание администратора по умолчанию (пароль: poliom_secure_487_admin)
+-- Создание администратора по умолчанию (пароль: admin123)
 INSERT INTO admins (username, email, hashed_password, full_name) 
 VALUES (
     'admin', 
     'admin@poliom.com', 
-    '$2b$12$Yeclk5P5R.ZOqkybU/Z/m.Xlrqk.m0b9uQ/A3UblOGi5g7DIUYPW2', 
+    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj3bp.Gm.F5e', 
     'Системный администратор'
 ) ON CONFLICT (username) DO NOTHING; 

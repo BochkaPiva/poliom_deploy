@@ -3,6 +3,7 @@
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -18,6 +19,9 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
+    
+    # Обратная связь с QueryLog
+    query_logs = relationship("QueryLog", back_populates="user")
     
     def __repr__(self):
         return f"<User(id={self.id}, telegram_id={self.telegram_id}, username='{self.username}')>" 

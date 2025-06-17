@@ -12,7 +12,7 @@ Base = declarative_base()
 # Создаем движок базы данных
 def get_database_url():
     """Получает URL базы данных из переменных окружения"""
-    return os.getenv("DATABASE_URL", "postgresql://rag_user:rag_password@localhost:5432/rag_db")
+    return os.getenv("DATABASE_URL", "postgresql://postgres:poliom_secure_2024_db_pass@localhost:5432/poliom_local")
 
 # Инициализируем движок
 engine = create_engine(
